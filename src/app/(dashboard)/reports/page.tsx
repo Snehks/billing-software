@@ -60,10 +60,8 @@ export default function ReportsPage() {
         return // Don't change dates for custom
     }
 
-    if (period !== 'custom') {
-      setDateFrom(from.toISOString().split('T')[0])
-      setDateTo(today.toISOString().split('T')[0])
-    }
+    setDateFrom(from.toISOString().split('T')[0])
+    setDateTo(today.toISOString().split('T')[0])
   }, [period])
 
   const fetchData = async () => {

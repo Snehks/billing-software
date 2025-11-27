@@ -43,9 +43,9 @@ export function CommandPalette() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [parties, setParties] = useState<Party[]>([])
-  const [items, setItems] = useState<Item[]>([])
+  const [invoices, setInvoices] = useState<Pick<Invoice, 'id' | 'invoice_number' | 'billed_to_name' | 'grand_total'>[]>([])
+  const [parties, setParties] = useState<Pick<Party, 'id' | 'name' | 'gstin'>[]>([])
+  const [items, setItems] = useState<Pick<Item, 'id' | 'name' | 'hsn_code'>[]>([])
   const [dataLoaded, setDataLoaded] = useState(false)
 
   // Keyboard shortcut to open

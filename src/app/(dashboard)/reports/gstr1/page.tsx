@@ -210,7 +210,7 @@ export default function GSTR1ExportPage() {
             itm_det: {
               txval: inv.sub_total,
               rt: (inv.cgst_rate || 0) * 2 || inv.igst_rate || 18,
-              ...(inv.cgst_amount ? { camt: inv.cgst_amount, samt: inv.sgst_amount } : {}),
+              ...(inv.cgst_amount ? { camt: inv.cgst_amount, samt: inv.sgst_amount ?? undefined } : {}),
               ...(inv.igst_amount ? { iamt: inv.igst_amount } : {}),
             }
           }]
