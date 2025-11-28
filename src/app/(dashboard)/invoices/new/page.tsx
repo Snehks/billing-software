@@ -367,11 +367,14 @@ export default function NewInvoicePage() {
 
       if (itemsError) throw itemsError
 
-      // Update next invoice number
-      await supabase
-        .from('company_settings')
-        .update({ next_invoice_number: invoiceNum + 1 })
-        .eq('id', 1)
+      // Update next invoice number only if we used it or went higher
+      const currentNext = settings?.next_invoice_number || 1
+      if (invoiceNum >= currentNext) {
+        await supabase
+          .from('company_settings')
+          .update({ next_invoice_number: invoiceNum + 1 })
+          .eq('id', 1)
+      }
 
       toast.success('Invoice saved successfully')
 
