@@ -16,10 +16,9 @@ import { MessageCircle, Send, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ShareWhatsAppButtonProps {
-  invoiceNumber: number
+  invoiceNumber: number | null
   partyName: string
   grandTotal: number
-  dueDate?: string | null
   partyPhone?: string | null
   invoiceId: string
 }
@@ -28,7 +27,6 @@ export function ShareWhatsAppButton({
   invoiceNumber,
   partyName,
   grandTotal,
-  dueDate,
   partyPhone,
   invoiceId,
 }: ShareWhatsAppButtonProps) {
@@ -45,16 +43,12 @@ export function ShareWhatsAppButton({
   const formatAmount = (amount: number) =>
     `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-
   const defaultMessage = `Dear ${partyName},
 
 Please find below the invoice details from Shweta Plastics:
 
-📄 Invoice #${invoiceNumber}
-💰 Amount: ${formatAmount(grandTotal)}${dueDate ? `
-📅 Due Date: ${formatDate(dueDate)}` : ''}
+📄 Invoice #${invoiceNumber ?? 'Draft'}
+💰 Amount: ${formatAmount(grandTotal)}
 
 View Invoice: ${invoiceUrl}
 

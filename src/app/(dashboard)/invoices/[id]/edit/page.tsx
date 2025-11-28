@@ -26,9 +26,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Trash2, Copy, Save, ArrowLeft, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Copy, Save, ArrowLeft, AlertTriangle, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import { Party, Item, CompanySettings, Invoice, InvoiceItem, INDIAN_STATES, UNITS, TRANSPORT_MODES, PAYMENT_TERMS } from '@/lib/types'
+import { Party, Item, CompanySettings, Invoice, InvoiceItem, INDIAN_STATES, UNITS, TRANSPORT_MODES } from '@/lib/types'
 import { amountToWords } from '@/lib/amount-to-words'
 
 interface LineItem {
@@ -74,9 +74,9 @@ export default function EditInvoicePage() {
   const [itemSearchIndex, setItemSearchIndex] = useState<number | null>(null)
 
   // Form state
-  const [invoiceNumber, setInvoiceNumber] = useState<number>(0)
+  const [isDraft, setIsDraft] = useState(false)
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('')
   const [invoiceDate, setInvoiceDate] = useState('')
-  const [dueDate, setDueDate] = useState('')
   const [partyGstin, setPartyGstin] = useState('')
 
   // Billed To
@@ -153,9 +153,9 @@ export default function EditInvoicePage() {
       // Populate form with existing invoice data
       if (invoiceRes.data) {
         const inv = invoiceRes.data as Invoice
-        setInvoiceNumber(inv.invoice_number)
+        setIsDraft(inv.is_draft)
+        setInvoiceNumber(inv.invoice_number?.toString() || (settingsRes.data?.next_invoice_number?.toString() || '1'))
         setInvoiceDate(inv.invoice_date)
-        setDueDate(inv.due_date || '')
         setPartyGstin(inv.party_gstin || '')
 
         setBilledTo({
@@ -269,23 +269,13 @@ export default function EditInvoicePage() {
     setPartySearch(party.name)
     setShowPartyDropdown(false)
 
-    // Auto-set place of supply and due date based on payment terms
+    // Auto-set place of supply
     if (party.state_code) {
       setTransport(prev => ({
         ...prev,
         place_of_supply: party.state || '',
         place_of_supply_state_code: party.state_code || '',
       }))
-    }
-
-    // Calculate due date based on payment terms
-    if (party.payment_terms && invoiceDate) {
-      const terms = PAYMENT_TERMS.find(t => t.value === party.payment_terms)
-      if (terms) {
-        const date = new Date(invoiceDate)
-        date.setDate(date.getDate() + terms.days)
-        setDueDate(date.toISOString().split('T')[0])
-      }
     }
   }
 
@@ -355,21 +345,31 @@ export default function EditInvoicePage() {
   }
 
   // Save invoice
-  const handleSave = async () => {
+  const handleSave = async (finalize: boolean = false) => {
     // Show warning if invoice has payments
-    if (hasPayments) {
+    if (hasPayments && !isDraft) {
       setShowPaymentWarning(true)
       return
     }
 
-    await performSave()
+    await performSave(finalize)
   }
 
-  const performSave = async () => {
+  const performSave = async (finalize: boolean = false) => {
     // Validation
     if (!billedTo.name.trim()) {
       toast.error('Please enter party name')
       return
+    }
+
+    // If finalizing a draft, validate invoice number
+    let invoiceNum: number | null = null
+    if (finalize && isDraft) {
+      invoiceNum = parseInt(invoiceNumber)
+      if (!invoiceNumber.trim() || isNaN(invoiceNum) || invoiceNum <= 0) {
+        toast.error('Please enter a valid invoice number')
+        return
+      }
     }
 
     const validLineItems = lineItems.filter(li => li.description.trim() && li.quantity && li.rate)
@@ -381,47 +381,66 @@ export default function EditInvoicePage() {
     setSaving(true)
 
     try {
+      // Build update object
+      const updateData: Record<string, unknown> = {
+        invoice_date: invoiceDate,
+        party_id: billedTo.party_id || null,
+        party_gstin: partyGstin || null,
+        billed_to_name: billedTo.name,
+        billed_to_address: billedTo.address || null,
+        billed_to_state: billedTo.state || null,
+        billed_to_state_code: billedTo.state_code || null,
+        shipped_to_name: shippedTo.name || null,
+        shipped_to_address: shippedTo.address || null,
+        shipped_to_state: shippedTo.state || null,
+        shipped_to_state_code: shippedTo.state_code || null,
+        shipped_to_phone: shippedTo.phone || null,
+        transport_mode: transport.mode || null,
+        vehicle_number: transport.vehicle_number || null,
+        gr_rr_number: transport.gr_rr_number || null,
+        place_of_supply: transport.place_of_supply || null,
+        place_of_supply_state_code: transport.place_of_supply_state_code || null,
+        total_packages: transport.total_packages ? parseInt(transport.total_packages) : null,
+        amount_before_tax: totals.amountBeforeTax,
+        packaging_charges: parseFloat(packagingCharges) || 0,
+        sub_total: totals.subTotal,
+        cgst_rate: totals.cgstRate || null,
+        cgst_amount: totals.cgstAmount || null,
+        sgst_rate: totals.sgstRate || null,
+        sgst_amount: totals.sgstAmount || null,
+        igst_rate: totals.igstRate || null,
+        igst_amount: totals.igstAmount || null,
+        grand_total: totals.grandTotal,
+        amount_in_words: totals.amountInWords,
+        reverse_charge: reverseCharge,
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+      }
+
+      // If finalizing a draft, add invoice number and set is_draft to false
+      if (finalize && isDraft && invoiceNum !== null) {
+        updateData.invoice_number = invoiceNum
+        updateData.is_draft = false
+      }
+
       // Update invoice
       const { error: invoiceError } = await supabase
         .from('invoices')
-        .update({
-          invoice_date: invoiceDate,
-          due_date: dueDate || null,
-          party_id: billedTo.party_id || null,
-          party_gstin: partyGstin || null,
-          billed_to_name: billedTo.name,
-          billed_to_address: billedTo.address || null,
-          billed_to_state: billedTo.state || null,
-          billed_to_state_code: billedTo.state_code || null,
-          shipped_to_name: shippedTo.name || null,
-          shipped_to_address: shippedTo.address || null,
-          shipped_to_state: shippedTo.state || null,
-          shipped_to_state_code: shippedTo.state_code || null,
-          shipped_to_phone: shippedTo.phone || null,
-          transport_mode: transport.mode || null,
-          vehicle_number: transport.vehicle_number || null,
-          gr_rr_number: transport.gr_rr_number || null,
-          place_of_supply: transport.place_of_supply || null,
-          place_of_supply_state_code: transport.place_of_supply_state_code || null,
-          total_packages: transport.total_packages ? parseInt(transport.total_packages) : null,
-          amount_before_tax: totals.amountBeforeTax,
-          packaging_charges: parseFloat(packagingCharges) || 0,
-          sub_total: totals.subTotal,
-          cgst_rate: totals.cgstRate || null,
-          cgst_amount: totals.cgstAmount || null,
-          sgst_rate: totals.sgstRate || null,
-          sgst_amount: totals.sgstAmount || null,
-          igst_rate: totals.igstRate || null,
-          igst_amount: totals.igstAmount || null,
-          grand_total: totals.grandTotal,
-          amount_in_words: totals.amountInWords,
-          reverse_charge: reverseCharge,
-          notes: notes || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', invoiceId)
 
       if (invoiceError) throw invoiceError
+
+      // Update next invoice number if we finalized
+      if (finalize && isDraft && invoiceNum !== null) {
+        const currentNext = settings?.next_invoice_number || 1
+        if (invoiceNum >= currentNext) {
+          await supabase
+            .from('company_settings')
+            .update({ next_invoice_number: invoiceNum + 1 })
+            .eq('id', 1)
+        }
+      }
 
       // Delete existing line items and re-insert
       await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
@@ -444,7 +463,7 @@ export default function EditInvoicePage() {
 
       if (itemsError) throw itemsError
 
-      toast.success('Invoice updated successfully')
+      toast.success(finalize && isDraft ? 'Invoice finalized successfully' : 'Invoice updated successfully')
       router.push(`/invoices/${invoiceId}`)
     } catch (error: unknown) {
       console.error('Error updating invoice:', error)
@@ -479,7 +498,7 @@ export default function EditInvoicePage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={performSave}>
+            <AlertDialogAction onClick={() => performSave(false)}>
               Edit Anyway
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -492,7 +511,9 @@ export default function EditInvoicePage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <h1 className="text-2xl font-bold text-slate-900">Edit Invoice #{invoiceNumber}</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isDraft ? 'Edit Draft' : `Edit Invoice #${invoiceNumber}`}
+          </h1>
           {hasPayments && (
             <span className="text-sm text-yellow-600 flex items-center gap-1">
               <AlertTriangle className="h-4 w-4" />
@@ -500,10 +521,18 @@ export default function EditInvoicePage() {
             </span>
           )}
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => handleSave(false)} disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+          {isDraft && (
+            <Button onClick={() => handleSave(true)} disabled={saving}>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              {saving ? 'Saving...' : 'Finalize Invoice'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -513,13 +542,15 @@ export default function EditInvoicePage() {
             <CardTitle>Invoice Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Invoice No.</Label>
+                <Label>Invoice No.{isDraft && ' *'}</Label>
                 <Input
                   value={invoiceNumber}
-                  disabled
-                  className="bg-slate-50"
+                  onChange={(e) => isDraft && setInvoiceNumber(e.target.value)}
+                  disabled={!isDraft}
+                  className={!isDraft ? 'bg-slate-50' : ''}
+                  placeholder={isDraft ? 'Enter invoice number' : ''}
                 />
               </div>
               <div className="space-y-2">
@@ -528,14 +559,6 @@ export default function EditInvoicePage() {
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
                 />
               </div>
               <div className="space-y-2">

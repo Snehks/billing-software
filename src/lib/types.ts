@@ -56,9 +56,9 @@ export interface Item {
 
 export interface Invoice {
   id: string
-  invoice_number: number
+  invoice_number: number | null  // null for drafts
+  is_draft: boolean
   invoice_date: string
-  due_date: string | null
   party_id: string | null
   party_gstin: string | null
   billed_to_name: string

@@ -83,8 +83,10 @@ CREATE INDEX idx_items_name ON public.items USING gin(name gin_trgm_ops);
 -- ============================================
 CREATE TABLE public.invoices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    invoice_number INTEGER NOT NULL UNIQUE,
+    invoice_number INTEGER UNIQUE,  -- NULL for drafts
+    is_draft BOOLEAN NOT NULL DEFAULT false,
     invoice_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date DATE,
 
     -- Billed To
     party_id UUID REFERENCES public.parties(id),

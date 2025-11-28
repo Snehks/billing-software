@@ -13,11 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { FileText, Plus, Search, X, Filter, AlertTriangle, Download } from 'lucide-react'
+import { FileText, Plus, Search, X, Filter, Download } from 'lucide-react'
 import Link from 'next/link'
 import { Invoice, Party } from '@/lib/types'
 
-type PaymentStatus = 'all' | 'paid' | 'partial' | 'unpaid' | 'overdue'
+type PaymentStatus = 'all' | 'paid' | 'partial' | 'unpaid' | 'draft'
 
 export default function InvoicesPage() {
   const supabase = createClient()
@@ -40,7 +40,7 @@ export default function InvoicesPage() {
 
   const fetchData = async () => {
     const [invoicesRes, partiesRes] = await Promise.all([
-      supabase.from('invoices').select('*').order('invoice_number', { ascending: false }),
+      supabase.from('invoices').select('*').order('is_draft', { ascending: false }).order('invoice_date', { ascending: false }),
       supabase.from('parties').select('*').order('name'),
     ])
 
@@ -66,18 +66,9 @@ export default function InvoicesPage() {
     setLoading(false)
   }
 
-  const getPaymentStatus = (invoice: Invoice): 'Paid' | 'Partial' | 'Unpaid' | 'Overdue' => {
+  const getPaymentStatus = (invoice: Invoice): 'Paid' | 'Partial' | 'Unpaid' => {
     const paid = payments[invoice.id] || 0
     if (paid >= invoice.grand_total) return 'Paid'
-
-    // Check if overdue (has due date, past due, and not fully paid)
-    if (invoice.due_date) {
-      const dueDate = new Date(invoice.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today) return 'Overdue'
-    }
-
     if (paid > 0) return 'Partial'
     return 'Unpaid'
   }
@@ -104,11 +95,16 @@ export default function InvoicesPage() {
 
       // Payment status filter
       if (paymentStatus !== 'all') {
-        const status = getPaymentStatus(invoice)
-        if (paymentStatus === 'paid' && status !== 'Paid') return false
-        if (paymentStatus === 'partial' && status !== 'Partial') return false
-        if (paymentStatus === 'unpaid' && status !== 'Unpaid') return false
-        if (paymentStatus === 'overdue' && status !== 'Overdue') return false
+        if (paymentStatus === 'draft') {
+          if (!invoice.is_draft) return false
+        } else {
+          // Non-draft filters should exclude drafts
+          if (invoice.is_draft) return false
+          const status = getPaymentStatus(invoice)
+          if (paymentStatus === 'paid' && status !== 'Paid') return false
+          if (paymentStatus === 'partial' && status !== 'Partial') return false
+          if (paymentStatus === 'unpaid' && status !== 'Unpaid') return false
+        }
       }
 
       // Date range filter
@@ -141,7 +137,7 @@ export default function InvoicesPage() {
   // Export to CSV
   const exportToCSV = () => {
     let csv = 'Invoice Export\n'
-    csv += 'Invoice #,Date,Due Date,Party,GSTIN,Taxable Amount,CGST,SGST,IGST,Grand Total,Paid,Balance,Status\n'
+    csv += 'Invoice #,Date,Party,GSTIN,Taxable Amount,CGST,SGST,IGST,Grand Total,Paid,Balance,Status\n'
 
     filteredInvoices.forEach(inv => {
       const paid = payments[inv.id] || 0
@@ -150,7 +146,6 @@ export default function InvoicesPage() {
 
       csv += `${inv.invoice_number},`
       csv += `${inv.invoice_date},`
-      csv += `${inv.due_date || ''},`
       csv += `"${inv.billed_to_name}",`
       csv += `${inv.party_gstin || ''},`
       csv += `${inv.sub_total || 0},`
@@ -245,10 +240,10 @@ export default function InvoicesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="draft">Drafts</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="partial">Partial</SelectItem>
                 <SelectItem value="unpaid">Unpaid</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
               </SelectContent>
             </Select>
 
@@ -301,42 +296,35 @@ export default function InvoicesPage() {
           ) : filteredInvoices.length > 0 ? (
             <div className="space-y-2">
               {filteredInvoices.map((invoice) => {
-                const status = getPaymentStatus(invoice)
+                const status = invoice.is_draft ? 'Draft' : getPaymentStatus(invoice)
                 const paid = payments[invoice.id] || 0
-                const isOverdue = status === 'Overdue'
+                const isDraft = invoice.is_draft
                 return (
                   <Link key={invoice.id} href={`/invoices/${invoice.id}`}>
-                    <div className={`flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors ${isOverdue ? 'border-red-200 bg-red-50/50' : ''}`}>
+                    <div className={`flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors ${isDraft ? 'border-amber-200 bg-amber-50/50' : ''}`}>
                       <div className="flex items-center gap-4">
                         <div className="w-16 text-center">
-                          <p className="font-bold text-lg">#{invoice.invoice_number}</p>
+                          {isDraft ? (
+                            <p className="font-bold text-lg text-amber-600">Draft</p>
+                          ) : (
+                            <p className="font-bold text-lg">#{invoice.invoice_number}</p>
+                          )}
                         </div>
                         <div>
                           <p className="font-medium">{invoice.billed_to_name}</p>
-                          <div className="flex items-center gap-2 text-sm text-slate-500">
-                            <span>{formatDate(invoice.invoice_date)}</span>
-                            {invoice.due_date && (
-                              <>
-                                <span className="text-slate-300">|</span>
-                                <span className={isOverdue ? 'text-red-500' : ''}>
-                                  Due: {formatDate(invoice.due_date)}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                          <p className="text-sm text-slate-500">{formatDate(invoice.invoice_date)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         <Badge
-                          variant={status === 'Paid' ? 'default' : status === 'Partial' ? 'secondary' : 'destructive'}
-                          className={isOverdue ? 'bg-red-600' : ''}
+                          variant={status === 'Paid' ? 'default' : status === 'Draft' ? 'outline' : status === 'Partial' ? 'secondary' : 'destructive'}
+                          className={isDraft ? 'border-amber-500 text-amber-600' : ''}
                         >
-                          {isOverdue && <AlertTriangle className="mr-1 h-3 w-3" />}
                           {status}
                         </Badge>
                         <div className="text-right">
                           <p className="font-bold">₹{invoice.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                          {status !== 'Paid' && (
+                          {status !== 'Paid' && status !== 'Draft' && (
                             <p className="text-sm text-red-500">
                               Due: ₹{(invoice.grand_total - paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </p>

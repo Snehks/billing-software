@@ -66,7 +66,7 @@ export default function ReportsPage() {
 
   const fetchData = async () => {
     const [invoicesRes, partiesRes] = await Promise.all([
-      supabase.from('invoices').select('*').order('invoice_date', { ascending: false }),
+      supabase.from('invoices').select('*').eq('is_draft', false).order('invoice_date', { ascending: false }),
       supabase.from('parties').select('*').order('name'),
     ])
 
@@ -208,10 +208,10 @@ export default function ReportsPage() {
       // Skip fully paid invoices
       if (due <= 0) return
 
-      // Calculate days overdue based on due_date or invoice_date
-      const dueDate = inv.due_date ? new Date(inv.due_date) : new Date(inv.invoice_date)
-      dueDate.setHours(0, 0, 0, 0)
-      const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+      // Calculate days since invoice date for aging
+      const invoiceDate = new Date(inv.invoice_date)
+      invoiceDate.setHours(0, 0, 0, 0)
+      const daysOverdue = Math.floor((today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24))
 
       const invoiceWithDue = { ...inv, due, daysOverdue }
 
@@ -512,8 +512,7 @@ export default function ReportsPage() {
                       <th className="text-left p-3 font-medium">Invoice #</th>
                       <th className="text-left p-3 font-medium">Party</th>
                       <th className="text-left p-3 font-medium">Invoice Date</th>
-                      <th className="text-left p-3 font-medium">Due Date</th>
-                      <th className="text-center p-3 font-medium">Days Overdue</th>
+                      <th className="text-center p-3 font-medium">Days Since</th>
                       <th className="text-right p-3 font-medium">Total</th>
                       <th className="text-right p-3 font-medium">Outstanding</th>
                       <th className="text-left p-3 font-medium">Status</th>
@@ -533,25 +532,17 @@ export default function ReportsPage() {
                           <tr key={inv.id} className="border-b hover:bg-slate-50">
                             <td className="p-3">
                               <Link href={`/invoices/${inv.id}`} className="text-blue-600 hover:underline font-medium">
-                                #{inv.invoice_number}
+                                #{inv.invoice_number!}
                               </Link>
                             </td>
                             <td className="p-3">{inv.billed_to_name}</td>
                             <td className="p-3 text-slate-600">
                               {new Date(inv.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </td>
-                            <td className="p-3 text-slate-600">
-                              {inv.due_date
-                                ? new Date(inv.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                                : '-'
-                              }
-                            </td>
                             <td className="p-3 text-center">
-                              {inv.daysOverdue <= 0 ? (
-                                <span className="text-green-600">Not due</span>
-                              ) : (
-                                <span className="text-red-600 font-medium">{inv.daysOverdue} days</span>
-                              )}
+                              <span className={inv.daysOverdue > 30 ? 'text-red-600 font-medium' : 'text-slate-600'}>
+                                {inv.daysOverdue} days
+                              </span>
                             </td>
                             <td className="p-3 text-right">₹{inv.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                             <td className="p-3 text-right font-medium text-red-600">
@@ -569,7 +560,7 @@ export default function ReportsPage() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 bg-slate-100 font-bold">
-                      <td colSpan={6} className="p-3 text-right">Total Outstanding:</td>
+                      <td colSpan={5} className="p-3 text-right">Total Outstanding:</td>
                       <td className="p-3 text-right text-red-600">
                         ₹{agingAnalysis.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>

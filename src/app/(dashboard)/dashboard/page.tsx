@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Users, TrendingUp, AlertCircle, Plus, ArrowRight, AlertTriangle, Clock, Bell } from 'lucide-react'
+import { FileText, Users, TrendingUp, AlertCircle, Plus, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
@@ -55,28 +55,6 @@ export default async function DashboardPage() {
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
   }
-
-  // Calculate overdue and due soon invoices
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const sevenDaysFromNow = new Date(today)
-  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
-
-  const overdueInvoices = invoices.filter(inv => {
-    const paid = paymentTotals[inv.id] || 0
-    if (paid >= inv.grand_total) return false // Already paid
-    if (!inv.due_date) return false
-    const dueDate = new Date(inv.due_date)
-    return dueDate < today
-  })
-
-  const dueSoonInvoices = invoices.filter(inv => {
-    const paid = paymentTotals[inv.id] || 0
-    if (paid >= inv.grand_total) return false // Already paid
-    if (!inv.due_date) return false
-    const dueDate = new Date(inv.due_date)
-    return dueDate >= today && dueDate <= sevenDaysFromNow
-  })
 
   // Recent invoices (last 5)
   const recentInvoices = invoices.slice(0, 5)
@@ -160,109 +138,6 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
-
-      {/* Alerts Section */}
-      {(overdueInvoices.length > 0 || dueSoonInvoices.length > 0) && (
-        <div className="mb-8 space-y-4">
-          {/* Overdue Invoices Alert */}
-          {overdueInvoices.length > 0 && (
-            <Card className="border-red-200 bg-red-50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-red-600" />
-                  <CardTitle className="text-red-800">
-                    {overdueInvoices.length} Overdue Invoice{overdueInvoices.length > 1 ? 's' : ''}
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {overdueInvoices.slice(0, 3).map(inv => {
-                    const paid = paymentTotals[inv.id] || 0
-                    const balance = inv.grand_total - paid
-                    const dueDate = new Date(inv.due_date!)
-                    const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-                    return (
-                      <Link key={inv.id} href={`/invoices/${inv.id}`}>
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-red-100 hover:border-red-300 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <p className="font-medium text-sm">#{inv.invoice_number} - {inv.billed_to_name}</p>
-                              <p className="text-xs text-red-600">
-                                {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue (Due: {formatDate(inv.due_date!)})
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-red-600">₹{balance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-                          </div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                  {overdueInvoices.length > 3 && (
-                    <Link href="/invoices?status=overdue">
-                      <Button variant="outline" size="sm" className="w-full text-red-600 border-red-200 hover:bg-red-100">
-                        View all {overdueInvoices.length} overdue invoices
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Due Soon Alert */}
-          {dueSoonInvoices.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-amber-600" />
-                  <CardTitle className="text-amber-800">
-                    {dueSoonInvoices.length} Invoice{dueSoonInvoices.length > 1 ? 's' : ''} Due Soon
-                  </CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {dueSoonInvoices.slice(0, 3).map(inv => {
-                    const paid = paymentTotals[inv.id] || 0
-                    const balance = inv.grand_total - paid
-                    const dueDate = new Date(inv.due_date!)
-                    const daysUntilDue = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-                    return (
-                      <Link key={inv.id} href={`/invoices/${inv.id}`}>
-                        <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-100 hover:border-amber-300 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div>
-                              <p className="font-medium text-sm">#{inv.invoice_number} - {inv.billed_to_name}</p>
-                              <p className="text-xs text-amber-600">
-                                {daysUntilDue === 0 ? 'Due today' : `Due in ${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''}`} ({formatDate(inv.due_date!)})
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-amber-600">₹{balance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-                          </div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                  {dueSoonInvoices.length > 3 && (
-                    <Link href="/invoices">
-                      <Button variant="outline" size="sm" className="w-full text-amber-600 border-amber-200 hover:bg-amber-100">
-                        View all {dueSoonInvoices.length} invoices due soon
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
 
       {/* Recent Invoices */}
       <Card>

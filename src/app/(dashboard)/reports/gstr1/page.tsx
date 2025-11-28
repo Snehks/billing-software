@@ -85,7 +85,7 @@ export default function GSTR1ExportPage() {
 
   const fetchData = async () => {
     const [invoicesRes, creditNotesRes, settingsRes] = await Promise.all([
-      supabase.from('invoices').select('*').order('invoice_date'),
+      supabase.from('invoices').select('*').eq('is_draft', false).order('invoice_date'),
       supabase.from('credit_notes').select('*').order('credit_note_date'),
       supabase.from('company_settings').select('*').eq('id', 1).single(),
     ])
@@ -199,7 +199,7 @@ export default function GSTR1ExportPage() {
       b2b.push({
         ctin: gstin,
         inv: invs.map(inv => ({
-          inum: inv.invoice_number.toString(),
+          inum: inv.invoice_number!.toString(),
           idt: formatGSTRDate(inv.invoice_date),
           val: inv.grand_total,
           pos: inv.place_of_supply_state_code || companyStateCode,

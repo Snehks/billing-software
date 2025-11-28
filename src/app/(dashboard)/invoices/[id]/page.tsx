@@ -197,7 +197,6 @@ export default function InvoiceDetailPage() {
             invoiceNumber={invoice.invoice_number}
             partyName={invoice.billed_to_name}
             grandTotal={invoice.grand_total}
-            dueDate={invoice.due_date}
             partyPhone={invoice.shipped_to_phone}
             invoiceId={invoice.id}
           />
@@ -215,21 +214,10 @@ export default function InvoiceDetailPage() {
             <CardTitle>Invoice Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <p className="text-slate-500">Date</p>
                 <p className="font-medium">{formatDate(invoice.invoice_date)}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Due Date</p>
-                {invoice.due_date ? (
-                  <p className={`font-medium ${new Date(invoice.due_date) < new Date() && paymentStatus !== 'Paid' ? 'text-red-600' : ''}`}>
-                    {formatDate(invoice.due_date)}
-                    {new Date(invoice.due_date) < new Date() && paymentStatus !== 'Paid' && ' (Overdue)'}
-                  </p>
-                ) : (
-                  <p className="font-medium text-slate-400">Not set</p>
-                )}
               </div>
               <div>
                 <p className="text-slate-500">Party</p>
@@ -247,7 +235,7 @@ export default function InvoiceDetailPage() {
                 <p className="text-slate-500">Transport</p>
                 <p className="font-medium">{invoice.transport_mode || '-'} {invoice.vehicle_number || ''}</p>
               </div>
-              <div className="col-span-2">
+              <div>
                 <p className="text-slate-500">Grand Total</p>
                 <p className="font-bold text-lg">₹{invoice.grand_total?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
               </div>

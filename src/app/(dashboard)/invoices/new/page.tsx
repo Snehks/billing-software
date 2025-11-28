@@ -16,9 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Trash2, Copy, Save, Printer } from 'lucide-react'
+import { Plus, Trash2, Copy, Save, Printer, FileEdit } from 'lucide-react'
 import { toast } from 'sonner'
-import { Party, Item, CompanySettings, INDIAN_STATES, UNITS, TRANSPORT_MODES, GST_RATES, PAYMENT_TERMS } from '@/lib/types'
+import { Party, Item, CompanySettings, INDIAN_STATES, UNITS, TRANSPORT_MODES } from '@/lib/types'
 import { amountToWords } from '@/lib/amount-to-words'
 
 interface LineItem {
@@ -62,7 +62,6 @@ export default function NewInvoicePage() {
   // Form state
   const [invoiceNumber, setInvoiceNumber] = useState<string>('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
-  const [dueDate, setDueDate] = useState('')
   const [partyGstin, setPartyGstin] = useState('')
 
   // Billed To
@@ -205,16 +204,6 @@ export default function NewInvoicePage() {
         place_of_supply_state_code: party.state_code || '',
       }))
     }
-
-    // Auto-calculate due date based on payment terms
-    if (party.payment_terms) {
-      const terms = PAYMENT_TERMS.find(t => t.value === party.payment_terms)
-      if (terms) {
-        const date = new Date(invoiceDate)
-        date.setDate(date.getDate() + terms.days)
-        setDueDate(date.toISOString().split('T')[0])
-      }
-    }
   }
 
   // Copy billed to shipped
@@ -283,12 +272,16 @@ export default function NewInvoicePage() {
   }
 
   // Save invoice
-  const handleSave = async (andPrint: boolean = false) => {
-    // Validation
-    const invoiceNum = parseInt(invoiceNumber)
-    if (!invoiceNumber.trim() || isNaN(invoiceNum) || invoiceNum <= 0) {
-      toast.error('Please enter a valid invoice number')
-      return
+  const handleSave = async (andPrint: boolean = false, isDraft: boolean = false) => {
+    // Validation - less strict for drafts
+    let invoiceNum: number | null = null
+
+    if (!isDraft) {
+      invoiceNum = parseInt(invoiceNumber)
+      if (!invoiceNumber.trim() || isNaN(invoiceNum) || invoiceNum <= 0) {
+        toast.error('Please enter a valid invoice number')
+        return
+      }
     }
 
     if (!billedTo.name.trim()) {
@@ -309,9 +302,9 @@ export default function NewInvoicePage() {
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
         .insert({
-          invoice_number: invoiceNum,
+          invoice_number: isDraft ? null : invoiceNum,
+          is_draft: isDraft,
           invoice_date: invoiceDate,
-          due_date: dueDate || null,
           party_id: billedTo.party_id || null,
           party_gstin: partyGstin || null,
           billed_to_name: billedTo.name,
@@ -367,18 +360,20 @@ export default function NewInvoicePage() {
 
       if (itemsError) throw itemsError
 
-      // Update next invoice number only if we used it or went higher
-      const currentNext = settings?.next_invoice_number || 1
-      if (invoiceNum >= currentNext) {
-        await supabase
-          .from('company_settings')
-          .update({ next_invoice_number: invoiceNum + 1 })
-          .eq('id', 1)
+      // Update next invoice number only if not a draft and we used it or went higher
+      if (!isDraft && invoiceNum !== null) {
+        const currentNext = settings?.next_invoice_number || 1
+        if (invoiceNum >= currentNext) {
+          await supabase
+            .from('company_settings')
+            .update({ next_invoice_number: invoiceNum + 1 })
+            .eq('id', 1)
+        }
       }
 
-      toast.success('Invoice saved successfully')
+      toast.success(isDraft ? 'Draft saved successfully' : 'Invoice saved successfully')
 
-      if (andPrint) {
+      if (andPrint && !isDraft) {
         window.open(`/print/${invoice.id}`, '_blank')
       }
       router.push('/invoices')
@@ -412,11 +407,15 @@ export default function NewInvoicePage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">New Invoice</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleSave(false)} disabled={saving}>
+          <Button variant="outline" onClick={() => handleSave(false, true)} disabled={saving}>
+            <FileEdit className="mr-2 h-4 w-4" />
+            {saving ? 'Saving...' : 'Save as Draft'}
+          </Button>
+          <Button variant="outline" onClick={() => handleSave(false, false)} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
             {saving ? 'Saving...' : 'Save'}
           </Button>
-          <Button onClick={() => handleSave(true)} disabled={saving}>
+          <Button onClick={() => handleSave(true, false)} disabled={saving}>
             <Printer className="mr-2 h-4 w-4" />
             Save & Print
           </Button>
@@ -430,7 +429,7 @@ export default function NewInvoicePage() {
             <CardTitle>Invoice Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Invoice No.</Label>
                 <Input
@@ -445,14 +444,6 @@ export default function NewInvoicePage() {
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
