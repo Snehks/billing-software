@@ -60,7 +60,7 @@ export default function NewInvoicePage() {
   const [itemSearchIndex, setItemSearchIndex] = useState<number | null>(null)
 
   // Form state
-  const [invoiceNumber, setInvoiceNumber] = useState<number>(0)
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0])
   const [dueDate, setDueDate] = useState('')
   const [partyGstin, setPartyGstin] = useState('')
@@ -128,7 +128,7 @@ export default function NewInvoicePage() {
       if (itemsRes.data) setItems(itemsRes.data)
       if (settingsRes.data) {
         setSettings(settingsRes.data)
-        setInvoiceNumber(settingsRes.data.next_invoice_number)
+        setInvoiceNumber(settingsRes.data.next_invoice_number?.toString() || '1')
       }
 
       setLoading(false)
@@ -285,6 +285,12 @@ export default function NewInvoicePage() {
   // Save invoice
   const handleSave = async (andPrint: boolean = false) => {
     // Validation
+    const invoiceNum = parseInt(invoiceNumber)
+    if (!invoiceNumber.trim() || isNaN(invoiceNum) || invoiceNum <= 0) {
+      toast.error('Please enter a valid invoice number')
+      return
+    }
+
     if (!billedTo.name.trim()) {
       toast.error('Please enter party name')
       return
@@ -303,7 +309,7 @@ export default function NewInvoicePage() {
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
         .insert({
-          invoice_number: invoiceNumber,
+          invoice_number: invoiceNum,
           invoice_date: invoiceDate,
           due_date: dueDate || null,
           party_id: billedTo.party_id || null,
@@ -364,7 +370,7 @@ export default function NewInvoicePage() {
       // Update next invoice number
       await supabase
         .from('company_settings')
-        .update({ next_invoice_number: invoiceNumber + 1 })
+        .update({ next_invoice_number: invoiceNum + 1 })
         .eq('id', 1)
 
       toast.success('Invoice saved successfully')
@@ -379,7 +385,7 @@ export default function NewInvoicePage() {
 
       // Handle specific errors
       if (err?.code === '23505' || err?.message?.includes('duplicate') || err?.message?.includes('unique')) {
-        toast.error(`Invoice #${invoiceNumber} already exists. Please use a different number.`)
+        toast.error(`Invoice #${invoiceNum} already exists. Please use a different number.`)
       } else if (err?.code === '42501' || err?.message?.includes('policy')) {
         toast.error('Permission denied. Please check database settings.')
       } else {
@@ -426,8 +432,8 @@ export default function NewInvoicePage() {
                 <Label>Invoice No.</Label>
                 <Input
                   value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(parseInt(e.target.value) || 0)}
-                  type="number"
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  placeholder="Invoice number"
                 />
               </div>
               <div className="space-y-2">
