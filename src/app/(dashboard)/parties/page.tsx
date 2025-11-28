@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Users, Plus, Pencil, Trash2, FileText, ChevronRight } from 'lucide-react'
+import { Users, Plus, Pencil, Trash2, FileText, ChevronRight, Search, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Party, INDIAN_STATES } from '@/lib/types'
@@ -30,6 +30,7 @@ export default function PartiesPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingParty, setEditingParty] = useState<Party | null>(null)
+  const [fetchingGst, setFetchingGst] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     gstin: '',
@@ -68,6 +69,41 @@ export default function PartiesPage() {
       state_code: stateCode,
       state: state?.name || '',
     })
+  }
+
+  const fetchGstDetails = async () => {
+    if (!formData.gstin || formData.gstin.length !== 15) {
+      toast.error('Please enter a valid 15-character GSTIN')
+      return
+    }
+
+    setFetchingGst(true)
+    try {
+      const response = await fetch(`/api/gst-lookup?gstin=${formData.gstin}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        toast.error(data.error || 'Failed to fetch GST details')
+        return
+      }
+
+      // Find state from state code
+      const stateFromCode = INDIAN_STATES.find(s => s.code === data.stateCode)
+
+      setFormData({
+        ...formData,
+        name: data.tradeName || data.legalName || formData.name,
+        address: data.address || formData.address,
+        state: stateFromCode?.name || formData.state,
+        state_code: data.stateCode || formData.state_code,
+      })
+
+      toast.success('GST details fetched successfully')
+    } catch {
+      toast.error('Failed to fetch GST details. Please try again.')
+    } finally {
+      setFetchingGst(false)
+    }
   }
 
   const resetForm = () => {
@@ -177,13 +213,30 @@ export default function PartiesPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="gstin">GSTIN</Label>
-                <Input
-                  id="gstin"
-                  value={formData.gstin}
-                  onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                  maxLength={15}
-                  placeholder="e.g., 27AABCU9603R1ZM"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="gstin"
+                    value={formData.gstin}
+                    onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
+                    maxLength={15}
+                    placeholder="e.g., 27AABCU9603R1ZM"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={fetchGstDetails}
+                    disabled={fetchingGst || formData.gstin.length !== 15}
+                    title="Fetch details from GST"
+                  >
+                    {fetchingGst ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="address">Address</Label>
