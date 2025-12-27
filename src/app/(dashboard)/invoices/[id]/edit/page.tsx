@@ -30,6 +30,7 @@ import { Plus, Trash2, Copy, Save, ArrowLeft, AlertTriangle, CheckCircle } from 
 import { toast } from 'sonner'
 import { Party, Item, CompanySettings, Invoice, InvoiceItem, INDIAN_STATES, UNITS, TRANSPORT_MODES } from '@/lib/types'
 import { amountToWords } from '@/lib/amount-to-words'
+import { toTitleCase } from '@/lib/utils'
 
 interface LineItem {
   id: string
@@ -390,11 +391,11 @@ export default function EditInvoicePage() {
         invoice_date: invoiceDate,
         party_id: billedTo.party_id || null,
         party_gstin: partyGstin || null,
-        billed_to_name: billedTo.name,
+        billed_to_name: toTitleCase(billedTo.name),
         billed_to_address: billedTo.address || null,
         billed_to_state: billedTo.state || null,
         billed_to_state_code: billedTo.state_code || null,
-        shipped_to_name: shippedTo.name || null,
+        shipped_to_name: shippedTo.name ? toTitleCase(shippedTo.name) : null,
         shipped_to_address: shippedTo.address || null,
         shipped_to_state: shippedTo.state || null,
         shipped_to_state_code: shippedTo.state_code || null,
@@ -482,7 +483,7 @@ export default function EditInvoicePage() {
         // Insert only new items
         if (newItemsToInsert.length > 0) {
           const masterItemsToInsert = newItemsToInsert.map(li => ({
-            name: li.description.trim(),
+            name: toTitleCase(li.description.trim()),
             hsn_code: li.hsn_code || null,
             default_unit: li.unit,
             default_rate: parseFloat(li.rate) || null,
@@ -521,7 +522,7 @@ export default function EditInvoicePage() {
         invoice_id: invoiceId,
         serial_number: index + 1,
         item_id: itemIdMap[li.id] || li.item_id || null,
-        description: li.description,
+        description: toTitleCase(li.description),
         hsn_code: li.hsn_code || null,
         quantity: parseFloat(li.quantity),
         unit: li.unit,
