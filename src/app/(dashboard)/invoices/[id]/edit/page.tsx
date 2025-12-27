@@ -40,6 +40,7 @@ interface LineItem {
   unit: string
   rate: string
   amount: number
+  saveToItems: boolean
 }
 
 const emptyLineItem = (): LineItem => ({
@@ -51,6 +52,7 @@ const emptyLineItem = (): LineItem => ({
   unit: 'Pc',
   rate: '',
   amount: 0,
+  saveToItems: false,
 })
 
 export default function EditInvoicePage() {
@@ -200,6 +202,7 @@ export default function EditInvoicePage() {
           unit: item.unit,
           rate: item.rate.toString(),
           amount: item.amount,
+          saveToItems: false,
         })))
       }
 
@@ -300,6 +303,7 @@ export default function EditInvoicePage() {
       hsn_code: item.hsn_code || '',
       unit: item.default_unit,
       rate: item.default_rate?.toString() || '',
+      saveToItems: false, // Already exists in master list
     }
 
     // Calculate amount
@@ -442,13 +446,44 @@ export default function EditInvoicePage() {
         }
       }
 
+      // Save new items to master items list if marked for saving
+      const itemsToSave = validLineItems.filter(li => li.saveToItems && !li.item_id && li.description.trim())
+      const itemIdMap: Record<string, string> = {} // Map line item id to new master item id
+
+      if (itemsToSave.length > 0) {
+        const masterItemsToInsert = itemsToSave.map(li => ({
+          name: li.description.trim(),
+          hsn_code: li.hsn_code || null,
+          default_unit: li.unit,
+          default_rate: parseFloat(li.rate) || null,
+          gst_rate: settings?.default_gst_rate || 18,
+        }))
+
+        const { data: newItems, error: newItemsError } = await supabase
+          .from('items')
+          .insert(masterItemsToInsert)
+          .select()
+
+        if (newItemsError) {
+          console.error('Error saving items to master list:', newItemsError)
+          // Continue without failing - items will be saved without master link
+        } else if (newItems) {
+          // Map the new item IDs back to line items
+          itemsToSave.forEach((li, idx) => {
+            if (newItems[idx]) {
+              itemIdMap[li.id] = newItems[idx].id
+            }
+          })
+        }
+      }
+
       // Delete existing line items and re-insert
       await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
 
       const lineItemsToInsert = validLineItems.map((li, index) => ({
         invoice_id: invoiceId,
         serial_number: index + 1,
-        item_id: li.item_id || null,
+        item_id: itemIdMap[li.id] || li.item_id || null,
         description: li.description,
         hsn_code: li.hsn_code || null,
         quantity: parseFloat(li.quantity),
@@ -462,6 +497,11 @@ export default function EditInvoicePage() {
         .insert(lineItemsToInsert)
 
       if (itemsError) throw itemsError
+
+      // Show success message for saved items
+      if (Object.keys(itemIdMap).length > 0) {
+        toast.success(`${Object.keys(itemIdMap).length} item(s) saved to master list`)
+      }
 
       toast.success(finalize && isDraft ? 'Invoice finalized successfully' : 'Invoice updated successfully')
       router.push(`/invoices/${invoiceId}`)
@@ -790,6 +830,7 @@ export default function EditInvoicePage() {
                     <th className="text-left p-2 w-20">Unit</th>
                     <th className="text-right p-2 w-24">Rate</th>
                     <th className="text-right p-2 w-28">Amount</th>
+                    <th className="text-center p-2 w-16" title="Save to Items List">Save</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -868,6 +909,19 @@ export default function EditInvoicePage() {
                       </td>
                       <td className="p-2 text-right font-medium">
                         ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 text-center">
+                        {!item.item_id && item.description.trim() && (
+                          <Checkbox
+                            checked={item.saveToItems}
+                            onCheckedChange={(checked) => {
+                              const newItems = [...lineItems]
+                              newItems[index] = { ...newItems[index], saveToItems: checked as boolean }
+                              setLineItems(newItems)
+                            }}
+                            title="Save this item to the master items list for future use"
+                          />
+                        )}
                       </td>
                       <td className="p-2">
                         <Button
