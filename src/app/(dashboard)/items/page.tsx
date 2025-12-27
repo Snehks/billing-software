@@ -23,6 +23,7 @@ import {
 import { Package, Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Item, UNITS, GST_RATES } from '@/lib/types'
+import { toTitleCase } from '@/lib/utils'
 
 export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([])
@@ -73,7 +74,7 @@ export default function ItemsPage() {
     e.preventDefault()
 
     const payload = {
-      name: formData.name,
+      name: toTitleCase(formData.name.trim()),
       hsn_code: formData.hsn_code || null,
       default_unit: formData.default_unit,
       default_rate: formData.default_rate ? parseFloat(formData.default_rate) : null,

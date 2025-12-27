@@ -24,6 +24,7 @@ import { Users, Plus, Pencil, Trash2, FileText, ChevronRight, Search, Loader2 } 
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Party, INDIAN_STATES } from '@/lib/types'
+import { toTitleCase } from '@/lib/utils'
 
 export default function PartiesPage() {
   const [parties, setParties] = useState<Party[]>([])
@@ -122,10 +123,16 @@ export default function PartiesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Apply title case to name
+    const dataToSave = {
+      ...formData,
+      name: toTitleCase(formData.name.trim()),
+    }
+
     if (editingParty) {
       const { error } = await supabase
         .from('parties')
-        .update(formData)
+        .update(dataToSave)
         .eq('id', editingParty.id)
 
       if (error) {
@@ -137,7 +144,7 @@ export default function PartiesPage() {
     } else {
       const { error } = await supabase
         .from('parties')
-        .insert(formData)
+        .insert(dataToSave)
 
       if (error) {
         toast.error('Failed to add party')

@@ -30,6 +30,7 @@ import { Plus, Trash2, Copy, Save, ArrowLeft, AlertTriangle, CheckCircle } from 
 import { toast } from 'sonner'
 import { Party, Item, CompanySettings, Invoice, InvoiceItem, INDIAN_STATES, UNITS, TRANSPORT_MODES } from '@/lib/types'
 import { amountToWords } from '@/lib/amount-to-words'
+import { toTitleCase } from '@/lib/utils'
 
 interface LineItem {
   id: string
@@ -40,6 +41,7 @@ interface LineItem {
   unit: string
   rate: string
   amount: number
+  saveToItems: boolean
 }
 
 const emptyLineItem = (): LineItem => ({
@@ -51,6 +53,7 @@ const emptyLineItem = (): LineItem => ({
   unit: 'Pc',
   rate: '',
   amount: 0,
+  saveToItems: false,
 })
 
 export default function EditInvoicePage() {
@@ -200,6 +203,7 @@ export default function EditInvoicePage() {
           unit: item.unit,
           rate: item.rate.toString(),
           amount: item.amount,
+          saveToItems: false,
         })))
       }
 
@@ -300,6 +304,7 @@ export default function EditInvoicePage() {
       hsn_code: item.hsn_code || '',
       unit: item.default_unit,
       rate: item.default_rate?.toString() || '',
+      saveToItems: false, // Already exists in master list
     }
 
     // Calculate amount
@@ -386,11 +391,11 @@ export default function EditInvoicePage() {
         invoice_date: invoiceDate,
         party_id: billedTo.party_id || null,
         party_gstin: partyGstin || null,
-        billed_to_name: billedTo.name,
+        billed_to_name: toTitleCase(billedTo.name),
         billed_to_address: billedTo.address || null,
         billed_to_state: billedTo.state || null,
         billed_to_state_code: billedTo.state_code || null,
-        shipped_to_name: shippedTo.name || null,
+        shipped_to_name: shippedTo.name ? toTitleCase(shippedTo.name) : null,
         shipped_to_address: shippedTo.address || null,
         shipped_to_state: shippedTo.state || null,
         shipped_to_state_code: shippedTo.state_code || null,
@@ -442,14 +447,82 @@ export default function EditInvoicePage() {
         }
       }
 
+      // Save new items to master items list if marked for saving
+      const itemsToSave = validLineItems.filter(li => li.saveToItems && !li.item_id && li.description.trim())
+      const itemIdMap: Record<string, string> = {} // Map line item id to new master item id
+
+      if (itemsToSave.length > 0) {
+        // Check which items already exist by name
+        const { data: existingItems } = await supabase
+          .from('items')
+          .select('id, name')
+          .in('name', itemsToSave.map(li => li.description.trim()))
+
+        // Create a map of existing item names (lowercase) to their IDs
+        const existingItemMap: Record<string, string> = {}
+        existingItems?.forEach(item => {
+          existingItemMap[item.name.toLowerCase()] = item.id
+        })
+
+        // Filter out items that already exist
+        const newItemsToInsert = itemsToSave.filter(li =>
+          !existingItemMap[li.description.trim().toLowerCase()]
+        )
+        const skippedItems = itemsToSave.filter(li =>
+          existingItemMap[li.description.trim().toLowerCase()]
+        )
+
+        // Map skipped items to their existing IDs
+        skippedItems.forEach(li => {
+          const existingId = existingItemMap[li.description.trim().toLowerCase()]
+          if (existingId) {
+            itemIdMap[li.id] = existingId
+          }
+        })
+
+        // Insert only new items
+        if (newItemsToInsert.length > 0) {
+          const masterItemsToInsert = newItemsToInsert.map(li => ({
+            name: toTitleCase(li.description.trim()),
+            hsn_code: li.hsn_code || null,
+            default_unit: li.unit,
+            default_rate: parseFloat(li.rate) || null,
+            gst_rate: settings?.default_gst_rate || 18,
+          }))
+
+          const { data: newItems, error: newItemsError } = await supabase
+            .from('items')
+            .insert(masterItemsToInsert)
+            .select()
+
+          if (newItemsError) {
+            console.error('Error saving items to master list:', newItemsError)
+          } else if (newItems) {
+            newItemsToInsert.forEach((li, idx) => {
+              if (newItems[idx]) {
+                itemIdMap[li.id] = newItems[idx].id
+              }
+            })
+          }
+        }
+
+        // Show appropriate messages
+        if (newItemsToInsert.length > 0) {
+          toast.success(`${newItemsToInsert.length} item(s) saved to master list`)
+        }
+        if (skippedItems.length > 0) {
+          toast.info(`${skippedItems.length} item(s) already exist and were linked`)
+        }
+      }
+
       // Delete existing line items and re-insert
       await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId)
 
       const lineItemsToInsert = validLineItems.map((li, index) => ({
         invoice_id: invoiceId,
         serial_number: index + 1,
-        item_id: li.item_id || null,
-        description: li.description,
+        item_id: itemIdMap[li.id] || li.item_id || null,
+        description: toTitleCase(li.description),
         hsn_code: li.hsn_code || null,
         quantity: parseFloat(li.quantity),
         unit: li.unit,
@@ -790,6 +863,7 @@ export default function EditInvoicePage() {
                     <th className="text-left p-2 w-20">Unit</th>
                     <th className="text-right p-2 w-24">Rate</th>
                     <th className="text-right p-2 w-28">Amount</th>
+                    <th className="text-center p-2 w-16" title="Save to Items List">Save</th>
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -868,6 +942,19 @@ export default function EditInvoicePage() {
                       </td>
                       <td className="p-2 text-right font-medium">
                         ₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 text-center">
+                        {!item.item_id && item.description.trim() && (
+                          <Checkbox
+                            checked={item.saveToItems}
+                            onCheckedChange={(checked) => {
+                              const newItems = [...lineItems]
+                              newItems[index] = { ...newItems[index], saveToItems: checked as boolean }
+                              setLineItems(newItems)
+                            }}
+                            title="Save this item to the master items list for future use"
+                          />
+                        )}
                       </td>
                       <td className="p-2">
                         <Button
