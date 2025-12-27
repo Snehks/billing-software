@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Invoice, InvoiceItem, CompanySettings } from '@/lib/types'
+import { toTitleCase } from '@/lib/utils'
 
 export default function PrintInvoicePage() {
   const params = useParams()
@@ -168,14 +169,14 @@ export default function PrintInvoicePage() {
           <div className="grid grid-cols-2 border-b border-gray-200">
             <div className="p-4 border-r border-gray-100">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Bill To</p>
-              <p className="font-semibold text-gray-900 text-sm">{invoice.billed_to_name}</p>
+              <p className="font-semibold text-gray-900 text-sm">{toTitleCase(invoice.billed_to_name)}</p>
               <p className="text-[11px] text-gray-600 mt-1">{invoice.billed_to_address || ''}</p>
               <p className="text-[11px] text-gray-600">{invoice.billed_to_state || ''} {invoice.billed_to_state_code ? `(${invoice.billed_to_state_code})` : ''}</p>
               {invoice.party_gstin && <p className="text-[11px] text-gray-700 mt-1 font-medium">GSTIN: {invoice.party_gstin}</p>}
             </div>
             <div className="p-4">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Ship To</p>
-              <p className="font-semibold text-gray-900 text-sm">{invoice.shipped_to_name || invoice.billed_to_name}</p>
+              <p className="font-semibold text-gray-900 text-sm">{toTitleCase(invoice.shipped_to_name || invoice.billed_to_name)}</p>
               <p className="text-[11px] text-gray-600 mt-1">{invoice.shipped_to_address || invoice.billed_to_address || ''}</p>
               <p className="text-[11px] text-gray-600">{invoice.shipped_to_state || invoice.billed_to_state || ''} {invoice.shipped_to_state_code ? `(${invoice.shipped_to_state_code})` : ''}</p>
             </div>
@@ -223,7 +224,7 @@ export default function PrintInvoicePage() {
                 {items.map((item, index) => (
                   <tr key={item.id}>
                     <td className="text-center text-gray-400">{index + 1}</td>
-                    <td className="font-medium">{item.description}</td>
+                    <td className="font-medium">{toTitleCase(item.description)}</td>
                     <td className="text-center text-gray-500">{item.hsn_code || '-'}</td>
                     <td className="text-right">{item.quantity}</td>
                     <td className="text-center text-gray-500">{item.unit}</td>
