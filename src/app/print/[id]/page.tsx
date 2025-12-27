@@ -48,6 +48,12 @@ export default function PrintInvoicePage() {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })
   }
 
+  // Format number with Indian locale (lakhs/crores style: 12,34,567.89)
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return '0.00'
+    return amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  }
+
   // Calculate empty rows needed to fill A4 page
   const TARGET_ROWS = 10
   const emptyRowsCount = Math.max(0, TARGET_ROWS - items.length)
@@ -132,18 +138,15 @@ export default function PrintInvoicePage() {
         <div className="invoice-wrapper">
           {/* Header */}
           <div className="p-6 border-b border-gray-200">
+            {/* Centered Company Name */}
+            <div className="text-center mb-4">
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{settings.company_name?.toUpperCase()}</h1>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Mfrs. of Agriculture Spray Pump Plastic Nozzles & PVC Parts</p>
+            </div>
+
             <div className="flex justify-between items-start">
               <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                    SP
-                  </div>
-                  <div>
-                    <h1 className="text-lg font-bold text-gray-900 tracking-tight">{settings.company_name?.toUpperCase()}</h1>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Mfrs. of Agriculture Spray Pump Plastic Nozzles & PVC Parts</p>
-                  </div>
-                </div>
-                <div className="text-[11px] text-gray-600 mt-3 space-y-0.5">
+                <div className="text-[11px] text-gray-600 space-y-0.5">
                   <p>{settings.address}</p>
                   <p>Ph: {settings.phone} | {settings.email}</p>
                   <p className="font-medium text-gray-700">GSTIN: {settings.gstin}</p>
@@ -224,8 +227,8 @@ export default function PrintInvoicePage() {
                     <td className="text-center text-gray-500">{item.hsn_code || '-'}</td>
                     <td className="text-right">{item.quantity}</td>
                     <td className="text-center text-gray-500">{item.unit}</td>
-                    <td className="text-right">₹{item.rate?.toFixed(2)}</td>
-                    <td className="text-right font-medium">₹{item.amount?.toFixed(2)}</td>
+                    <td className="text-right">₹{formatCurrency(item.rate)}</td>
+                    <td className="text-right font-medium">₹{formatCurrency(item.amount)}</td>
                   </tr>
                 ))}
                 {/* Empty rows to fill the page */}
@@ -270,35 +273,35 @@ export default function PrintInvoicePage() {
               <div className="text-[11px]">
                 <div className="flex justify-between p-3 border-b border-gray-100">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-medium">₹{invoice.amount_before_tax?.toFixed(2)}</span>
+                  <span className="font-medium">₹{formatCurrency(invoice.amount_before_tax)}</span>
                 </div>
                 {(invoice.packaging_charges ?? 0) > 0 && (
                   <div className="flex justify-between p-3 border-b border-gray-100">
                     <span className="text-gray-600">Packaging / Forwarding</span>
-                    <span>₹{invoice.packaging_charges?.toFixed(2)}</span>
+                    <span>₹{formatCurrency(invoice.packaging_charges)}</span>
                   </div>
                 )}
                 {(invoice.cgst_rate ?? 0) > 0 && (
                   <>
                     <div className="flex justify-between p-3 border-b border-gray-100">
                       <span className="text-gray-600">CGST @ {invoice.cgst_rate}%</span>
-                      <span>₹{invoice.cgst_amount?.toFixed(2)}</span>
+                      <span>₹{formatCurrency(invoice.cgst_amount)}</span>
                     </div>
                     <div className="flex justify-between p-3 border-b border-gray-100">
                       <span className="text-gray-600">SGST @ {invoice.sgst_rate}%</span>
-                      <span>₹{invoice.sgst_amount?.toFixed(2)}</span>
+                      <span>₹{formatCurrency(invoice.sgst_amount)}</span>
                     </div>
                   </>
                 )}
                 {(invoice.igst_rate ?? 0) > 0 && (
                   <div className="flex justify-between p-3 border-b border-gray-100">
                     <span className="text-gray-600">IGST @ {invoice.igst_rate}%</span>
-                    <span>₹{invoice.igst_amount?.toFixed(2)}</span>
+                    <span>₹{formatCurrency(invoice.igst_amount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between p-4 bg-gray-900 text-white">
                   <span className="font-semibold">Grand Total</span>
-                  <span className="font-bold text-base">₹ {invoice.grand_total?.toFixed(2)}</span>
+                  <span className="font-bold text-base">₹{formatCurrency(invoice.grand_total)}</span>
                 </div>
                 <div className="p-4 text-center">
                   <p className="text-[10px] text-gray-500 mb-8">For {settings.company_name}</p>
