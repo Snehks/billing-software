@@ -349,29 +349,66 @@ export default function NewInvoicePage() {
       const itemIdMap: Record<string, string> = {} // Map line item id to new master item id
 
       if (itemsToSave.length > 0) {
-        const masterItemsToInsert = itemsToSave.map(li => ({
-          name: li.description.trim(),
-          hsn_code: li.hsn_code || null,
-          default_unit: li.unit,
-          default_rate: parseFloat(li.rate) || null,
-          gst_rate: settings?.default_gst_rate || 18,
-        }))
-
-        const { data: newItems, error: newItemsError } = await supabase
+        // Check which items already exist by name
+        const { data: existingItems } = await supabase
           .from('items')
-          .insert(masterItemsToInsert)
-          .select()
+          .select('id, name')
+          .in('name', itemsToSave.map(li => li.description.trim()))
 
-        if (newItemsError) {
-          console.error('Error saving items to master list:', newItemsError)
-          // Continue without failing - items will be saved without master link
-        } else if (newItems) {
-          // Map the new item IDs back to line items
-          itemsToSave.forEach((li, idx) => {
-            if (newItems[idx]) {
-              itemIdMap[li.id] = newItems[idx].id
-            }
-          })
+        // Create a map of existing item names (lowercase) to their IDs
+        const existingItemMap: Record<string, string> = {}
+        existingItems?.forEach(item => {
+          existingItemMap[item.name.toLowerCase()] = item.id
+        })
+
+        // Filter out items that already exist
+        const newItemsToInsert = itemsToSave.filter(li =>
+          !existingItemMap[li.description.trim().toLowerCase()]
+        )
+        const skippedItems = itemsToSave.filter(li =>
+          existingItemMap[li.description.trim().toLowerCase()]
+        )
+
+        // Map skipped items to their existing IDs
+        skippedItems.forEach(li => {
+          const existingId = existingItemMap[li.description.trim().toLowerCase()]
+          if (existingId) {
+            itemIdMap[li.id] = existingId
+          }
+        })
+
+        // Insert only new items
+        if (newItemsToInsert.length > 0) {
+          const masterItemsToInsert = newItemsToInsert.map(li => ({
+            name: li.description.trim(),
+            hsn_code: li.hsn_code || null,
+            default_unit: li.unit,
+            default_rate: parseFloat(li.rate) || null,
+            gst_rate: settings?.default_gst_rate || 18,
+          }))
+
+          const { data: newItems, error: newItemsError } = await supabase
+            .from('items')
+            .insert(masterItemsToInsert)
+            .select()
+
+          if (newItemsError) {
+            console.error('Error saving items to master list:', newItemsError)
+          } else if (newItems) {
+            newItemsToInsert.forEach((li, idx) => {
+              if (newItems[idx]) {
+                itemIdMap[li.id] = newItems[idx].id
+              }
+            })
+          }
+        }
+
+        // Show appropriate messages
+        if (newItemsToInsert.length > 0) {
+          toast.success(`${newItemsToInsert.length} item(s) saved to master list`)
+        }
+        if (skippedItems.length > 0) {
+          toast.info(`${skippedItems.length} item(s) already exist and were linked`)
         }
       }
 
@@ -393,11 +430,6 @@ export default function NewInvoicePage() {
         .insert(lineItemsToInsert)
 
       if (itemsError) throw itemsError
-
-      // Show success message for saved items
-      if (Object.keys(itemIdMap).length > 0) {
-        toast.success(`${Object.keys(itemIdMap).length} item(s) saved to master list`)
-      }
 
       // Update next invoice number only if not a draft and we used it or went higher
       if (!isDraft && invoiceNum !== null) {
